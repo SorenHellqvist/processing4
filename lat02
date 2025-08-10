@@ -1,0 +1,100 @@
+import beads.*;
+
+AudioContext ac;
+int bar = 0;
+
+// 12-bar blues progression in C major
+int[][] bluesProgression = {
+  {60, 64, 67}, {60, 64, 67}, {60, 64, 67}, {60, 64, 67}, // C
+  {65, 69, 72}, {65, 69, 72}, // F
+  {60, 64, 67}, {60, 64, 67}, // C
+  {67, 71, 74}, {65, 69, 72}, // G, F
+  {60, 64, 67}, {67, 71, 74}                              // C, G
+};
+
+void setup() {
+  size(400, 200);
+  ac = new AudioContext();
+  ac.start();
+
+  int bpm = 120;
+  float beatsPerSecond = bpm / 60.0;
+  frameRate(beatsPerSecond); // 120 BPM = 2 chords per second
+}
+
+void draw() {
+  int[] chord = bluesProgression[bar % bluesProgression.length];
+  println("Bar " + (bar + 1) + ": " + chordToString(chord));
+
+  // 🎹 Chord
+  Envelope chordEnv = new Envelope(ac, 0.0);
+  Gain chordGain = new Gain(ac, 3, chordEnv);
+
+  for (int note : chord) {
+    float freq = midiToFreq(note);
+    WavePlayer sine = new WavePlayer(ac, freq, Buffer.SINE);
+    WavePlayer square = new WavePlayer(ac, freq, Buffer.SQUARE);
+    WavePlayer saw = new WavePlayer(ac, freq, Buffer.SAW);
+
+    Gain voice = new Gain(ac, 3, 0.1f);
+    voice.addInput(sine);
+    voice.addInput(square);
+    voice.addInput(saw);
+
+    chordGain.addInput(voice);
+  }
+
+  chordEnv.addSegment(0.3f, 100); // Attack
+  chordEnv.addSegment(0.0f, 400); // Decay
+
+  // 🎸 Bass Line
+  int bassNote = chord[0] - 12; // One octave below root
+  float bassFreq = midiToFreq(bassNote);
+  WavePlayer bass = new WavePlayer(ac, bassFreq, Buffer.SINE);
+  Envelope bassEnv = new Envelope(ac, 0.0);
+  bassEnv.addSegment(0.3f, 50);
+  bassEnv.addSegment(0.0f, 300);
+  Gain bassGain = new Gain(ac, 1, bassEnv);
+  bassGain.addInput(bass);
+
+  // 🥁 Kick Drum
+  Noise kickNoise = new Noise(ac);
+  Envelope kickEnv = new Envelope(ac, 0.0);
+  kickEnv.addSegment(0.5f, 50);
+  kickEnv.addSegment(0.0f, 100);
+  Gain kickGain = new Gain(ac, 1, kickEnv);
+  kickGain.addInput(kickNoise);
+
+  // 🥁 Snare Drum
+  Noise snareNoise = new Noise(ac);
+  Envelope snareEnv = new Envelope(ac, 0.0);
+  snareEnv.addSegment(0.3f, 30);
+  snareEnv.addSegment(0.0f, 100);
+  Gain snareGain = new Gain(ac, 1, snareEnv);
+  snareGain.addInput(snareNoise);
+
+  // 🎛️ Reverb
+  Reverb reverb = new Reverb(ac);
+  reverb.setSize(0.7f);
+  reverb.setDamping(0.3f);
+  reverb.addInput(chordGain);
+  reverb.addInput(bassGain);
+  reverb.addInput(kickGain);
+  reverb.addInput(snareGain);
+
+  ac.out.addInput(reverb);
+
+  bar++;
+}
+
+float midiToFreq(int midiNote) {
+  return 440.0 * pow(2, (midiNote - 69) / 12.0);
+}
+
+String chordToString(int[] chord) {
+  String s = "";
+  for (int note : chord) {
+    s += note + " ";
+  }
+  return s.trim();
+}
